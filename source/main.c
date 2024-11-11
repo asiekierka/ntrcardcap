@@ -60,10 +60,12 @@ uint32_t rx_bufpos = 0;
 #define CMD_NTR_START  0x10
 // 0x11 [3:bufsize] [data...]
 #define CMD_NTR_FINISH 0x11
-// 0x12 [value] [2:flags]
+// 0x12 [value]
 #define CMD_NTR_SPI    0x12
 // 0x13 [1:empty] [1:seed0h] [1:seed1h] [4:seed0l] [4:seed0h]
 #define CMD_NTR_SET_SEED 0x13
+// 0x14 [none] [2:flags]
+#define CMD_NTR_SPICNT 0x14
 
 /* static const uint32_t ntr_buffer_sizes[] = {
   	0, 256 << 1, 256 << 2, 256 << 3, 256 << 4, 256 << 5, 256 << 6, 4
@@ -177,7 +179,7 @@ static void cdc_task(void) {
             }
 
             // Start card command
-            REG_AUXSPICNTH = CARD_CR1_ENABLE | CARD_CR1_IRQ;
+            // REG_AUXSPICNTH = CARD_CR1_ENABLE | CARD_CR1_IRQ;
             for (int i = 0; i < 8; i++)
                 REG_CARD_COMMAND[i] = rx_buffer[8 + i];
             REG_ROMCTRL = flags;
@@ -224,21 +226,29 @@ static void cdc_task(void) {
 
             break;
 
-        case CMD_NTR_SPI:
+        case CMD_NTR_SPICNT:
             // Read data from buffer
             if (rx_bufpos < 4) break;
             data_read = 4;
 
+            uint16_t spiCnt = *((uint16_t*) (rx_buffer + 2));;
+            REG_AUXSPICNT = spiCnt;
+            break;
+
+        case CMD_NTR_SPI:
+            // Read data from buffer
+            if (rx_bufpos < 2) break;
+            data_read = 2;
+
             ui_toggle_blink_spi_activity();
 
             // Perform SPI exchange
-            REG_AUXSPICNT = *((uint16_t*) (rx_buffer + 2));
             REG_AUXSPIDATA = rx_buffer[1];
             eepromWaitBusy();
             rx_buffer[1] = REG_AUXSPIDATA;
 
             // Write data to host
-            tud_cdc_write(rx_buffer, 4);
+            tud_cdc_write(rx_buffer, 2);
             tud_cdc_write_flush();
 
             ui_toggle_blink_spi_activity();
